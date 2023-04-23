@@ -1,11 +1,19 @@
-// TODO: Rename this file to change the name of this method from METHOD_NAME
-
 #![no_main]
-// If you want to try std support, also update the guest Cargo.toml file
-#![no_std]  // std support is experimental
+use hex;
+use risc0_zkvm::guest::env;
+use sha2::{Digest, Sha256};
 
 risc0_zkvm::guest::entry!(main);
 
 pub fn main() {
-    // TODO: Implement your guest code here
+    let substring: String = env::read();
+    let input: String = env::read();
+    let committed_hash_hex: String = env::read();
+
+    let input_hash = Sha256::digest(input.as_bytes());
+    let input_hash_hex = hex::encode(input_hash);
+
+    let result = input.contains(&substring) && input_hash_hex == committed_hash_hex;
+
+    env::commit(&result);
 }

@@ -1,41 +1,40 @@
-use ring::digest::{Context, Digest, SHA256};
-use std::io::{self, BufRead, Write};
+use risc0_zkvm::guest::GuestInput;
+use risc0_zkvm::prover::Prover;
+use risc0_zkvm::serde::{from_slice, to_vec};
+use sha2::{Digest, Sha256};
+use methods::{CHECK_SUBSTRING_ELF, CHECK_SUBSTRING_ID};
+
+#![no_std]
+#![feature(lang_items)]
+
+#[lang = "panic_impl"]
+#[no_mangle]
+pub fn panic_impl(_: &core::panic::PanicInfo<'_>) -> ! {
+    loop {}
+}
+
 
 fn main() {
-    let stdin = io::stdin();
-    let mut iterator = stdin.lock().lines();
+    let input = "Hello rust world";
+    let substring = "hello";
+    let hash = Sha256::digest(input.as_bytes());
+    let hash_hex = hex::encode(hash);
 
-    print!("Enter the string to search: ");
-    io::stdout().flush().unwrap();
-    let search_string = iterator.next().unwrap().unwrap();
+    let mut prover = Prover::new(CHECK_SUBSTRING_ELF)
+        .expect("Prover should be constructed from valid method source code and corresponding image ID");
 
-    print!("Enter the string to commit: ");
-    io::stdout().flush().unwrap();
-    let commit_string = iterator.next().unwrap().unwrap();
+    prover.add_input_string(&substring);
+    prover.add_input_string(&input);
+    prover.add_input_string(&hash_hex);
 
-    let found = commit_string.contains(&search_string);
+    let receipt = prover
+        .run()
+        .expect("Code should be provable unless it had an error or overflowed the maximum cycle count");
 
-    let digest = sha256(&commit_string);
+    receipt
+        .verify(CHECK_SUBSTRING_ID)
+        .expect("Code you have proven should successfully verify; did you specify the correct image ID?");
 
-    println!(
-        "SHA256 hash of commit string: {}\nFound search string: {}",
-        digest, found
-    );
-}
-
-fn sha256(data: &str) -> String {
-    let mut context = Context::new(&SHA256);
-    context.update(data.as_bytes());
-    let digest = context.finish();
-
-    to_hex_string(digest)
-}
-
-fn to_hex_string(digest: Digest) -> String {
-    digest
-        .as_ref()
-        .iter()
-        .map(|byte| format!("{:02x}", byte))
-        .collect::<Vec<String>>()
-        .join("")
+    let result: bool = from_slice(&receipt.journal).unwrap();
+    println!("Substring check result: {}", result);
 }
